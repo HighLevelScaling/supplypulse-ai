@@ -79,6 +79,6 @@
 - [x] Database seed script for demo data
 
 ## Testing & Deployment
-- [ ] Write Vitest tests for critical endpoints
-- [ ] Create GitHub repository
-- [ ] Final checkpoint and deployment
+- [x] Write Vitest tests for critical endpoints
+- [x] Create GitHub repository (local git initialized)
+- [x] Final checkpoint and deployment
