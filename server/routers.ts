@@ -227,6 +227,32 @@ export const appRouter = router({
         return { success: true };
       }),
     
+    updateTicker: protectedProcedure
+      .input(z.object({
+        supplierId: z.number(),
+        ticker: z.string().min(1).max(10),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+        
+        // Validate ticker format (uppercase letters only)
+        const cleanTicker = input.ticker.toUpperCase().replace(/[^A-Z]/g, "");
+        if (cleanTicker.length === 0) {
+          throw new Error("Invalid ticker symbol");
+        }
+        
+        await db.update(suppliers)
+          .set({ 
+            ticker: cleanTicker, 
+            publicCompany: true,
+            updatedAt: new Date() 
+          })
+          .where(and(eq(suppliers.id, input.supplierId), eq(suppliers.userId, ctx.user.id)));
+        
+        return { success: true, ticker: cleanTicker };
+      }),
+    
     getStats: protectedProcedure.query(async ({ ctx }) => {
       const db = await getDb();
       if (!db) return {

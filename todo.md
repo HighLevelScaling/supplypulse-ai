@@ -94,3 +94,10 @@
 - [x] Update supplier detail page with SEC filing data
 - [x] Add SEC filing history to dashboard
 - [x] Write tests for SEC integration
+
+## Stock Ticker Symbol Feature
+- [x] Add editable ticker field to supplier detail page
+- [x] Create ticker update tRPC endpoint
+- [x] Add ticker input to add supplier form
+- [x] Show ticker validation feedback
+- [x] Auto-trigger SEC sync when ticker is saved

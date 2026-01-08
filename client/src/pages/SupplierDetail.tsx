@@ -13,20 +13,29 @@ import {
   BarChart3,
   Building2,
   Calendar,
+  Check,
   ChevronRight,
   DollarSign,
+  Edit2,
   ExternalLink,
   FileText,
   Globe,
+  Loader2,
   Mail,
   MapPin,
   Phone,
+  RefreshCw,
   Shield,
   TrendingDown,
   TrendingUp,
   Users,
+  X,
 } from "lucide-react";
 import { Link, useParams } from "wouter";
+import { useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 import {
   Area,
   AreaChart,
@@ -131,6 +140,71 @@ function RiskGauge({ label, value, color }: { label: string; value: number; colo
 export default function SupplierDetail() {
   const params = useParams();
   const supplierId = params.id;
+  
+  // Ticker editing state
+  const [isEditingTicker, setIsEditingTicker] = useState(false);
+  const [tickerValue, setTickerValue] = useState(supplierData.ticker || "");
+  const [isSavingTicker, setIsSavingTicker] = useState(false);
+  const [isSyncingSEC, setIsSyncingSEC] = useState(false);
+  
+  // tRPC mutations
+  const updateTickerMutation = trpc.suppliers.updateTicker.useMutation({
+    onSuccess: () => {
+      toast.success("Ticker symbol saved successfully");
+      setIsEditingTicker(false);
+    },
+    onError: (error) => {
+      toast.error(`Failed to save ticker: ${error.message}`);
+    },
+    onSettled: () => {
+      setIsSavingTicker(false);
+    },
+  });
+  
+  const syncSECMutation = trpc.sec.syncSupplier.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(data.message || "SEC data synced successfully");
+      } else {
+        toast.error("Failed to sync SEC data");
+      }
+    },
+    onError: (error) => {
+      toast.error(`SEC sync failed: ${error.message}`);
+    },
+    onSettled: () => {
+      setIsSyncingSEC(false);
+    },
+  });
+  
+  const handleSaveTicker = () => {
+    if (!tickerValue.trim()) {
+      toast.error("Please enter a valid ticker symbol");
+      return;
+    }
+    setIsSavingTicker(true);
+    updateTickerMutation.mutate({
+      supplierId: parseInt(supplierId || "1"),
+      ticker: tickerValue.toUpperCase().trim(),
+    });
+  };
+  
+  const handleCancelEdit = () => {
+    setTickerValue(supplierData.ticker || "");
+    setIsEditingTicker(false);
+  };
+  
+  const handleSyncSEC = () => {
+    if (!tickerValue.trim()) {
+      toast.error("Please set a ticker symbol first");
+      return;
+    }
+    setIsSyncingSEC(true);
+    syncSECMutation.mutate({
+      supplierId: parseInt(supplierId || "1"),
+      ticker: tickerValue.toUpperCase().trim(),
+    });
+  };
 
   return (
     <DashboardLayout>
@@ -150,7 +224,67 @@ export default function SupplierDetail() {
               <div>
                 <h1 className="text-2xl font-bold">{supplierData.name}</h1>
                 <div className="flex items-center gap-2 text-muted-foreground">
-                  <span>{supplierData.ticker}</span>
+                  {/* Editable Ticker Symbol */}
+                  {isEditingTicker ? (
+                    <div className="flex items-center gap-1">
+                      <Input
+                        value={tickerValue}
+                        onChange={(e) => setTickerValue(e.target.value.toUpperCase())}
+                        placeholder="AAPL"
+                        className="w-20 h-6 text-xs uppercase bg-muted/50 border-cyber/30 focus:border-cyber"
+                        maxLength={10}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveTicker();
+                          if (e.key === "Escape") handleCancelEdit();
+                        }}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-green-400 hover:text-green-300"
+                        onClick={handleSaveTicker}
+                        disabled={isSavingTicker}
+                      >
+                        {isSavingTicker ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-red-400 hover:text-red-300"
+                        onClick={handleCancelEdit}
+                        disabled={isSavingTicker}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 group">
+                      <span className={tickerValue ? "text-cyber font-medium" : "text-muted-foreground italic"}>
+                        {tickerValue || "No ticker"}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => setIsEditingTicker(true)}
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </Button>
+                      {tickerValue && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-cyber"
+                          onClick={handleSyncSEC}
+                          disabled={isSyncingSEC}
+                          title="Sync SEC data"
+                        >
+                          {isSyncingSEC ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   <span>•</span>
                   <span>{supplierData.industry}</span>
                   <span>•</span>
