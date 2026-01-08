@@ -36,12 +36,15 @@ import {
   Globe,
   MoreHorizontal,
   Plus,
+  RefreshCw,
   Search,
   Shield,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
 import { useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import { Link } from "wouter";
 
 // Mock supplier data
@@ -216,6 +219,27 @@ export default function Suppliers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tierFilter, setTierFilter] = useState("all");
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const syncAllMutation = trpc.sec.syncAll.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Synced ${data.successful} suppliers successfully`);
+      if (data.failed > 0) {
+        toast.warning(`${data.failed} suppliers failed to sync`);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Sync failed: ${error.message}`);
+    },
+    onSettled: () => {
+      setIsSyncing(false);
+    },
+  });
+
+  const handleSyncAll = () => {
+    setIsSyncing(true);
+    syncAllMutation.mutate();
+  };
 
   const filteredSuppliers = suppliersData.filter((supplier) => {
     const matchesSearch =
@@ -237,10 +261,21 @@ export default function Suppliers() {
               Monitor and manage your supplier portfolio
             </p>
           </div>
-          <Button className="bg-gradient-cyber hover:opacity-90">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Supplier
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              onClick={handleSyncAll}
+              disabled={isSyncing}
+              className="hover:border-cyber/50"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? "animate-spin" : ""}`} />
+              {isSyncing ? "Syncing SEC Data..." : "Sync All SEC Data"}
+            </Button>
+            <Button className="bg-gradient-cyber hover:opacity-90">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Supplier
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}

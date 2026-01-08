@@ -8,6 +8,7 @@ import { leads, suppliers, alerts, alertRules, supplierNews, supplierCertificati
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { seedDatabase } from "./seed";
+import { getSupplierSECData, fetchSECFilings, fetchStockInsights, extractKeyEvents, categorizeFilings } from "./secEdgar";
 
 export const appRouter = router({
   system: systemRouter,
@@ -533,6 +534,207 @@ ${supplierContext}`;
           pages: 28,
         },
       ];
+    }),
+  }),
+
+  // ============================================
+  // SEC EDGAR ROUTER
+  // ============================================
+  sec: router({
+    // Fetch SEC filings for a supplier by ticker
+    getFilings: protectedProcedure
+      .input(z.object({
+        ticker: z.string().min(1),
+      }))
+      .query(async ({ input }) => {
+        const filings = await fetchSECFilings(input.ticker);
+        if (!filings) {
+          return { success: false, error: "Unable to fetch SEC filings", filings: null };
+        }
+        
+        const categorized = categorizeFilings(filings.filings || []);
+        const keyEvents = extractKeyEvents(filings.filings?.filter(f => f.type.includes("8-K")) || []);
+        
+        return {
+          success: true,
+          symbol: filings.symbol,
+          totalFilings: filings.filings?.length || 0,
+          filings: filings.filings?.slice(0, 20) || [],
+          categorized: {
+            annual: categorized.annual.slice(0, 5),
+            quarterly: categorized.quarterly.slice(0, 8),
+            current: categorized.current.slice(0, 10),
+          },
+          keyEvents: keyEvents.slice(0, 10),
+        };
+      }),
+    
+    // Fetch comprehensive stock insights
+    getInsights: protectedProcedure
+      .input(z.object({
+        ticker: z.string().min(1),
+      }))
+      .query(async ({ input }) => {
+        const insights = await fetchStockInsights(input.ticker);
+        if (!insights) {
+          return { success: false, error: "Unable to fetch stock insights", insights: null };
+        }
+        
+        return {
+          success: true,
+          symbol: insights.symbol,
+          companyName: insights.companyName,
+          technicalOutlook: insights.instrumentInfo?.technicalEvents,
+          valuation: insights.instrumentInfo?.valuation,
+          companyMetrics: insights.companySnapshot?.company,
+          sectorMetrics: insights.companySnapshot?.sector,
+          recommendation: insights.recommendation,
+          significantDevelopments: insights.sigDevs?.slice(0, 10),
+          secReports: insights.secReports?.slice(0, 5),
+        };
+      }),
+    
+    // Get full SEC data with risk assessment for a supplier
+    getFullAnalysis: protectedProcedure
+      .input(z.object({
+        ticker: z.string().min(1),
+      }))
+      .query(async ({ input }) => {
+        const data = await getSupplierSECData(input.ticker);
+        
+        return {
+          success: true,
+          ticker: input.ticker,
+          riskAssessment: data.riskAssessment,
+          filingsSummary: data.categorizedFilings ? {
+            annualReports: data.categorizedFilings.annual.length,
+            quarterlyReports: data.categorizedFilings.quarterly.length,
+            currentReports: data.categorizedFilings.current.length,
+            otherFilings: data.categorizedFilings.other.length,
+          } : null,
+          recentFilings: data.filings?.filings?.slice(0, 10) || [],
+          insights: data.insights ? {
+            companyName: data.insights.companyName,
+            technicalOutlook: data.insights.instrumentInfo?.technicalEvents?.shortTermOutlook,
+            valuation: data.insights.instrumentInfo?.valuation,
+            recommendation: data.insights.recommendation,
+          } : null,
+        };
+      }),
+    
+    // Sync SEC data to a supplier and update risk scores
+    syncSupplier: protectedProcedure
+      .input(z.object({
+        supplierId: z.number(),
+        ticker: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+        
+        // Verify supplier belongs to user
+        const supplierResult = await db.select()
+          .from(suppliers)
+          .where(and(eq(suppliers.id, input.supplierId), eq(suppliers.userId, ctx.user.id)))
+          .limit(1);
+        
+        if (supplierResult.length === 0) {
+          throw new Error("Supplier not found");
+        }
+        
+        // Fetch SEC data
+        const secData = await getSupplierSECData(input.ticker);
+        
+        // Update supplier with new risk scores
+        await db.update(suppliers)
+          .set({
+            ticker: input.ticker.toUpperCase(),
+            overallRiskScore: secData.riskAssessment.overallRiskScore,
+            financialRiskScore: secData.riskAssessment.financialRiskScore,
+            qualityRiskScore: secData.riskAssessment.qualityRiskScore,
+            geopoliticalRiskScore: secData.riskAssessment.geopoliticalRiskScore,
+            operationalRiskScore: secData.riskAssessment.operationalRiskScore,
+            lastAssessmentDate: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(suppliers.id, input.supplierId));
+        
+        // Create alert if risk is high
+        if (secData.riskAssessment.overallRiskScore >= 70) {
+          await db.insert(alerts).values({
+            userId: ctx.user.id,
+            supplierId: input.supplierId,
+            title: `High Risk Alert: ${supplierResult[0].name}`,
+            message: `SEC data analysis indicates elevated risk (score: ${secData.riskAssessment.overallRiskScore}). Risk factors: ${secData.riskAssessment.riskFactors.slice(0, 3).join("; ")}`,
+            alertType: "financial_risk",
+            severity: secData.riskAssessment.overallRiskScore >= 80 ? "critical" : "high",
+            priority: secData.riskAssessment.overallRiskScore,
+            status: "unread",
+          });
+        }
+        
+        return {
+          success: true,
+          riskAssessment: secData.riskAssessment,
+          message: `Successfully synced SEC data for ${input.ticker}`,
+        };
+      }),
+    
+    // Bulk sync all suppliers with tickers
+    syncAll: protectedProcedure.mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      
+      // Get all suppliers with tickers
+      const suppliersWithTickers = await db.select()
+        .from(suppliers)
+        .where(and(
+          eq(suppliers.userId, ctx.user.id),
+          sql`${suppliers.ticker} IS NOT NULL AND ${suppliers.ticker} != ''`
+        ));
+      
+      const results: Array<{ supplierId: number; ticker: string; success: boolean; error?: string }> = [];
+      
+      // Process each supplier (with rate limiting)
+      for (const supplier of suppliersWithTickers) {
+        if (!supplier.ticker) continue;
+        
+        try {
+          const secData = await getSupplierSECData(supplier.ticker);
+          
+          await db.update(suppliers)
+            .set({
+              overallRiskScore: secData.riskAssessment.overallRiskScore,
+              financialRiskScore: secData.riskAssessment.financialRiskScore,
+              qualityRiskScore: secData.riskAssessment.qualityRiskScore,
+              geopoliticalRiskScore: secData.riskAssessment.geopoliticalRiskScore,
+              operationalRiskScore: secData.riskAssessment.operationalRiskScore,
+              lastAssessmentDate: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(suppliers.id, supplier.id));
+          
+          results.push({ supplierId: supplier.id, ticker: supplier.ticker, success: true });
+          
+          // Rate limiting: wait 500ms between requests
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          results.push({
+            supplierId: supplier.id,
+            ticker: supplier.ticker,
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      }
+      
+      return {
+        success: true,
+        totalProcessed: results.length,
+        successful: results.filter(r => r.success).length,
+        failed: results.filter(r => !r.success).length,
+        results,
+      };
     }),
   }),
 });

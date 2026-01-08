@@ -20,6 +20,7 @@ import {
   FileText,
   Globe,
   Network,
+  RefreshCw,
   Shield,
   Target,
   TrendingDown,
@@ -633,6 +634,24 @@ export default function Dashboard() {
                     <span>Ask AI</span>
                   </Button>
                 </Link>
+              </div>
+              <div className="mt-4 p-4 rounded-lg bg-gradient-to-r from-cyber/10 to-plasma/10 border border-cyber/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-cyber/20">
+                      <RefreshCw className="w-5 h-5 text-cyber" />
+                    </div>
+                    <div>
+                      <p className="font-medium">SEC EDGAR Integration</p>
+                      <p className="text-sm text-muted-foreground">Sync real-time financial data for all suppliers</p>
+                    </div>
+                  </div>
+                  <Link href="/suppliers">
+                    <Button className="bg-gradient-cyber hover:opacity-90">
+                      Sync All Suppliers
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </CardContent>
           </Card>

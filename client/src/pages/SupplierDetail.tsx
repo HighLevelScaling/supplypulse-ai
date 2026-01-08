@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import SECFilings from "@/components/SECFilings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -240,6 +241,7 @@ export default function SupplierDetail() {
             <TabsTrigger value="certifications">Certifications</TabsTrigger>
             <TabsTrigger value="contacts">Contacts</TabsTrigger>
             <TabsTrigger value="news">News</TabsTrigger>
+            <TabsTrigger value="sec">SEC Filings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -474,6 +476,14 @@ export default function SupplierDetail() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* SEC Filings Tab */}
+          <TabsContent value="sec">
+            <SECFilings 
+              ticker={supplierData.ticker} 
+              supplierId={supplierData.id}
+            />
           </TabsContent>
         </Tabs>
       </div>

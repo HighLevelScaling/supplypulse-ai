@@ -82,3 +82,15 @@
 - [x] Write Vitest tests for critical endpoints
 - [x] Create GitHub repository (local git initialized)
 - [x] Final checkpoint and deployment
+
+## SEC EDGAR API Integration
+- [x] Research SEC EDGAR API endpoints and rate limits
+- [x] Build SEC EDGAR API service for fetching company filings
+- [x] Parse 10-K, 10-Q, and 8-K filings for financial data
+- [x] Create company CIK lookup by ticker symbol
+- [x] Build automatic financial data extraction from XBRL
+- [x] Create tRPC endpoints for SEC data sync
+- [x] Implement automatic risk score recalculation
+- [x] Update supplier detail page with SEC filing data
+- [x] Add SEC filing history to dashboard
+- [x] Write tests for SEC integration
